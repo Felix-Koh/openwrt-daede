@@ -105,6 +105,21 @@ function cleanNetns() {
 	});
 }
 
+function updateGeo(kind) {
+	const label = kind === 'geoip' ? 'GeoIP' : 'GeoSite';
+	return fs.exec('/usr/share/luci-app-daed/update-geo.sh', [kind]).then(function(res) {
+		if (res.code === 0) {
+			ui.addNotification(null, E('p', _('%s download started in the background. The Diagnostics card will refresh when it finishes (~1–3 min).').format(label)), 'info');
+		} else if (res.code === 75) {
+			ui.addNotification(null, E('p', _('%s update already running.').format(label)), 'warning');
+		} else {
+			ui.addNotification(null, E('p', _('%s update failed: %s').format(label, res.stderr || res.stdout || ('exit ' + res.code))), 'danger');
+		}
+	}).catch(function(e) {
+		ui.addNotification(null, E('p', _('%s update error: %s').format(label, e)), 'danger');
+	});
+}
+
 function renderDiagnostics(results) {
 	const map = {};
 	results.forEach(function(r) { map[r.key] = r; });
@@ -125,10 +140,19 @@ function renderDiagnostics(results) {
 	['geoip', 'geosite'].forEach(function(k) {
 		const r = map[k];
 		const name = k === 'geoip' ? 'GeoIP' : 'GeoSite';
+		const upBtn = E('button', { 'class': 'dd-diag-btn' }, 'Update');
+		upBtn.addEventListener('click', function() {
+			upBtn.disabled = true;
+			upBtn.textContent = '...';
+			updateGeo(k).finally(function() {
+				upBtn.disabled = false;
+				upBtn.textContent = 'Update';
+			});
+		});
 		if (r.exists && r.size > 0)
-			rows.push(mkRow('✓', 'dd-diag-ok', name, r.path, fmtBytes(r.size) + (r.mtime ? ' · ' + fmtMtime(r.mtime) : '')));
+			rows.push(mkRow('✓', 'dd-diag-ok', name, r.path, fmtBytes(r.size) + (r.mtime ? ' · ' + fmtMtime(r.mtime) : ''), upBtn));
 		else
-			rows.push(mkRow('✗', 'dd-diag-err', name, r.path, _('missing — install v2ray-geoip / v2ray-geosite')));
+			rows.push(mkRow('✗', 'dd-diag-err', name, r.path, _('missing — click Update to fetch'), upBtn));
 	});
 
 	// BTF — must exist

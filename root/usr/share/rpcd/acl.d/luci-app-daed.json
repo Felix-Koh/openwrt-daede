@@ -25,7 +25,9 @@
 				"/etc/init.d/daed disable": [ "exec" ],
 				"/sbin/uci set daed.config.enabled=*": [ "exec" ],
 				"/sbin/uci commit daed": [ "exec" ],
-				"/sbin/ip netns del daens": [ "exec" ]
+				"/sbin/ip netns del daens": [ "exec" ],
+				"/usr/share/luci-app-daed/update-geo.sh geoip": [ "exec" ],
+				"/usr/share/luci-app-daed/update-geo.sh geosite": [ "exec" ]
 			},
 			"uci": [ "daed" ]
 		}
