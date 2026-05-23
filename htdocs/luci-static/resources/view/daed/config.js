@@ -80,6 +80,13 @@ function toggleService(turnOn) {
 			else
 				fs.exec('/etc/init.d/daed', ['disable']);
 		})
+		.then(function() {
+			// Workaround for daed init.d not cleaning /run/netns/daens on stop:
+			// before starting, try to delete the stale netns. Ignore errors —
+			// on a clean boot the netns does not exist yet and del fails harmlessly.
+			if (turnOn)
+				return fs.exec('/sbin/ip', ['netns', 'del', 'daens']).catch(function() {});
+		})
 		.then(function() { return fs.exec('/etc/init.d/daed', [action]); })
 		.then(function(res) {
 			if (res && res.code !== 0)
@@ -132,7 +139,7 @@ function renderStatusCard(state, listenAddr) {
 	};
 
 	const actions = state.running
-		? [ openBtn, mkBtn('Restart', 'restart', 'positive'), mkBtn('Reload', 'reload', 'neutral') ]
+		? [ openBtn, mkBtn('Restart', 'restart', 'positive') ]
 		: [];
 
 	const row1 = E('div', { 'class': 'dd-status-row' }, [ badge ].concat(meta).concat([
