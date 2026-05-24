@@ -374,8 +374,8 @@ return view.extend({
 		const listenAddr = uci.get('daed', 'config', 'listen_addr') || backend.BACKENDS.daed.defaultListen;
 		const children = [
 			E('style', {}, CSS),
-			renderBackendSwitcher(ctx),
-			renderStatusCard(ctx, listenAddr)
+			renderStatusCard(ctx, listenAddr),
+			renderBackendSwitcher(ctx)
 		].filter(function(node) { return !!node; });
 
 		if (!ctx.installed[ctx.name]) {
