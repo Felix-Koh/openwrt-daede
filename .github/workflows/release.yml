@@ -274,7 +274,7 @@ jobs:
             fi
 
             if [ -n "$luci" ]; then
-              echo "luci=$luci" > "$target/manifest.txt"
+              echo "luci=$luci" > "$target/manifest-daede.txt"
             fi
           done
           find feed -type f | sort
@@ -296,8 +296,19 @@ jobs:
           hard_delete = true
           EOF
           find feed -type f | grep -q . || { echo "feed empty, skip sync"; exit 0; }
-          rclone sync feed/ "b2:${B2_BUCKET}/openwrt-feed/" \
+          rclone sync feed/ "b2:${B2_BUCKET}/openwrt-feed/daed/" \
             --checksum \
             --fast-list \
             --transfers 8 \
             --checkers 16
+
+      - name: Trigger unified feed aggregation
+        env:
+          AGGREGATE_FEED_TOKEN: ${{ secrets.AGGREGATE_FEED_TOKEN }}
+        run: |
+          [ -z "$AGGREGATE_FEED_TOKEN" ] && { echo "No aggregate token, skip trigger"; exit 0; }
+          curl -fsSL -X POST \
+            -H "Authorization: Bearer ${AGGREGATE_FEED_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            https://api.github.com/repos/kenzok8/openwrt-clashoo/actions/workflows/aggregate-feed.yml/dispatches \
+            -d '{"ref":"main"}'
