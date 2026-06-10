@@ -9,7 +9,7 @@ PKG_RELEASE:=1
 PKG_SOURCE:=dae-src-$(PKG_VERSION).tar.gz
 PKG_SOURCE_URL:=https://github.com/kenzok8/openwrt-daede/releases/download/dae-src
 PKG_SOURCE_SUBDIR:=$(PKG_NAME)-$(PKG_VERSION)
-PKG_HASH:=skip
+PKG_HASH:=f3673e406f448d4b217966d5fe951f0d5e8f62da6141ed01169bfd1da40ca0c0
 
 PKG_LICENSE:=AGPL-3.0-only
 PKG_LICENSE_FILE:=LICENSE
