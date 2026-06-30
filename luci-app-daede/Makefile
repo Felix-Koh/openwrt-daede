@@ -71,6 +71,7 @@ define Package/$(PKG_NAME)/install
 	$(INSTALL_DATA) ./root/usr/share/rpcd/acl.d/luci-app-daede.json $(1)/usr/share/rpcd/acl.d/luci-app-daede.json
 
 	$(INSTALL_DIR) $(1)/usr/share/luci-app-daede
+	$(INSTALL_BIN) ./root/usr/share/luci-app-daede/release-lib.sh $(1)/usr/share/luci-app-daede/release-lib.sh
 	$(INSTALL_BIN) ./root/usr/share/luci-app-daede/pkg-info.sh $(1)/usr/share/luci-app-daede/pkg-info.sh
 	$(INSTALL_BIN) ./root/usr/share/luci-app-daede/update-geo.sh $(1)/usr/share/luci-app-daede/update-geo.sh
 	$(INSTALL_BIN) ./root/usr/share/luci-app-daede/update-pkg.sh $(1)/usr/share/luci-app-daede/update-pkg.sh

@@ -135,8 +135,6 @@ function stamp() {
 
 return view.extend({
 	load: function() {
-		// background apk update so new versions show on next poll
-		fs.exec('/usr/share/luci-app-daede/refresh-index.sh', []).catch(function() {});
 		return Promise.all([
 			backend.detectBackend(),
 			uci.load('daed').catch(function() {}),

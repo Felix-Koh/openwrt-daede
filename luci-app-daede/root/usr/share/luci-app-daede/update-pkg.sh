@@ -5,6 +5,7 @@
 # immediately; the result is streamed to /tmp/luci-app-daede.pkg.<name>.log.
 
 PKG="$1"
+LIB="/usr/share/luci-app-daede/release-lib.sh"
 case "$PKG" in
 	dae|daed|luci-app-daede) ;;
 	*)
@@ -12,6 +13,11 @@ case "$PKG" in
 		exit 64
 		;;
 esac
+
+[ -r "$LIB" ] || {
+	echo "missing helper: $LIB" >&2
+	exit 1
+}
 
 # run from a /tmp copy so upgrading luci-app-daede (which replaces this script)
 # can't corrupt the in-flight upgrade
@@ -44,45 +50,69 @@ fi
 (
 	exec >"$LOG" 2>&1
 	trap 'rm -f "$LOCK"; [ "${0#/tmp/.daede-upd-}" != "$0" ] && rm -f "$0"' EXIT INT TERM
+	. "$LIB"
 
 	echo "$(date '+%F %T') begin upgrade: $PKG"
 
-	if command -v apk >/dev/null 2>&1; then
-		# shared apk lock with the bg index refresh (avoid "Unable to lock database")
-		(
-			flock 9
-			apk update 2>&1
-			# pin exact latest version + --force-broken-world so unrelated broken
-			# packages can't block this upgrade (cf. clashoo component_update)
-			ver=$(apk list "$PKG" 2>/dev/null | awk -v p="$PKG" '$1 ~ "^" p "-[0-9]" { v=$1; sub("^" p "-", "", v); print v }' | sort -V | tail -1)
-			if [ -n "$ver" ]; then
-				echo "--- apk add $PKG=$ver ---"
-				apk add "$PKG=$ver" --force-broken-world 2>&1
-			else
-				echo "--- apk add $PKG ---"
-				apk add "$PKG" --force-broken-world 2>&1
-			fi
-		) 9>/tmp/luci-app-daede.apk.lock
-		# apk's exit code is unreliable (broken-world noise); judge by state instead
-		if ! apk list --installed 2>/dev/null | grep -q "^${PKG}-"; then
-			echo "result: $PKG is not installed"
-			rc=1
-		elif apk list -u 2>/dev/null | grep -q "^${PKG}-"; then
-			echo "result: $PKG still has a pending upgrade"
-			rc=1
-		else
-			echo "result: $PKG is at the latest available version"
-			rc=0
-		fi
-	elif command -v opkg >/dev/null 2>&1; then
-		echo "--- opkg update ---"
-		opkg update 2>&1
-		echo "--- opkg upgrade $PKG ---"
-		opkg upgrade "$PKG" 2>&1
-		rc=$?
-	else
+	PM="$(detect_manager || true)"
+	if [ -z "$PM" ]; then
 		echo "no package manager found"
 		exit 3
+	fi
+
+	ARCH="$(detect_arch "$PM" 2>/dev/null || true)"
+	if [ -z "$ARCH" ]; then
+		echo "cannot detect architecture"
+		exit 4
+	fi
+
+	info="$(resolve_release_asset "$PKG" "$PM" "$ARCH" 2>/dev/null || true)"
+	TARGET_VER="$(printf '%s' "$info" | awk -F '\t' 'NR==1{print $1}')"
+	TARGET_URL="$(printf '%s' "$info" | awk -F '\t' 'NR==1{print $2}')"
+	RESOLVED_ARCH="$(printf '%s' "$info" | awk -F '\t' 'NR==1{print $3}')"
+	CUR_VER="$(installed_version "$PM" "$PKG" 2>/dev/null || true)"
+	EXT="$(asset_ext "$PM")"
+	OUT="/tmp/luci-app-daede.${PKG}.${EXT}"
+
+	if [ -z "$TARGET_VER" ] || [ -z "$TARGET_URL" ]; then
+		echo "cannot resolve latest GitHub release asset for $PKG ($ARCH)"
+		exit 5
+	fi
+
+	if [ -n "$CUR_VER" ] && version_ge "$CUR_VER" "$TARGET_VER"; then
+		echo "result: installed=${CUR_VER}, latest=${TARGET_VER}"
+		rc=0
+	else
+		echo "resolved release asset: $(basename "$TARGET_URL")"
+		[ -n "$CUR_VER" ] && echo "installed version: $CUR_VER"
+		echo "target version: $TARGET_VER"
+		echo "downloading from GitHub release..."
+		download_file "$(download_url "$TARGET_URL")" "$OUT" 2>&1 || {
+			echo "download failed: $TARGET_URL"
+			exit 6
+		}
+
+		if [ "$PM" = "apk" ]; then
+			# shared apk lock with any other package operation
+			(
+				flock 9
+				[ -n "$RESOLVED_ARCH" ] && [ "$RESOLVED_ARCH" != "$ARCH" ] && allow_apk_arch "$RESOLVED_ARCH"
+				echo "--- apk add --allow-untrusted $(basename "$OUT") ---"
+				apk add --allow-untrusted "$OUT" 2>&1
+			) 9>/tmp/luci-app-daede.apk.lock
+		else
+			echo "--- opkg install $(basename "$OUT") ---"
+			opkg install "$OUT" 2>&1
+		fi
+
+		NEW_VER="$(installed_version "$PM" "$PKG" 2>/dev/null || true)"
+		if [ -n "$NEW_VER" ] && version_ge "$NEW_VER" "$TARGET_VER"; then
+			echo "result: installed=${NEW_VER}, latest=${TARGET_VER}"
+			rc=0
+		else
+			echo "result: install did not reach target version (installed=${NEW_VER:-unknown}, latest=${TARGET_VER})"
+			rc=1
+		fi
 	fi
 
 	if [ "$rc" = 0 ]; then echo "$(date '+%F %T') ✓ 完成"; else echo "$(date '+%F %T') ✗ 失败 (rc=$rc)"; fi

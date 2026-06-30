@@ -5,37 +5,31 @@
 # the [Upgrade] button.
 
 PKG="$1"
+LIB="/usr/share/luci-app-daede/release-lib.sh"
+
 case "$PKG" in
 	dae|daed|luci-app-daede) ;;
 	*) echo "" ; exit 64 ;;
 esac
 
+[ -r "$LIB" ] || {
+	printf '\t\n'
+	exit 1
+}
+
+. "$LIB"
+
 installed=""
 latest=""
 
-if command -v apk >/dev/null 2>&1; then
-	if apk info -e "$PKG" >/dev/null 2>&1; then
-		installed=$(apk list -I "$PKG" 2>/dev/null | awk -v p="$PKG" '
-			$1 ~ "^" p "-" {
-				sub("^" p "-", "", $1);
-				print $1;
-				exit
-			}
-		')
+PM="$(detect_manager || true)"
+ARCH="$(detect_arch "$PM" 2>/dev/null || true)"
+
+if [ -n "$PM" ]; then
+	installed="$(installed_version "$PM" "$PKG" 2>/dev/null || true)"
+	if [ -n "$ARCH" ]; then
+		latest="$(resolve_release_asset "$PKG" "$PM" "$ARCH" 2>/dev/null | awk -F '\t' 'NR==1{print $1}')"
 	fi
-	# apk search treats ^ and $ as literal chars (not regex anchors), so the old
-	# `apk search "^pkg$"` matched nothing. Enumerate the exact-name package
-	# across all feeds via `apk list` and take the highest version. Restricting
-	# to "<pkg>-<digit>" avoids sibling names like <pkg>-geoip / luci-app-<pkg>.
-	latest=$(apk list "$PKG" 2>/dev/null | awk -v p="$PKG" '
-		$1 ~ "^" p "-[0-9]" {
-			v = $1; sub("^" p "-", "", v);
-			print v
-		}
-	' | sort -V | tail -1)
-elif command -v opkg >/dev/null 2>&1; then
-	installed=$(opkg status "$PKG" 2>/dev/null | awk -F': ' '$1=="Version"{print $2; exit}')
-	latest=$(opkg info "$PKG" 2>/dev/null | awk -F': ' '$1=="Version"{print $2; exit}')
 fi
 
 printf '%s\t%s\n' "$installed" "$latest"
